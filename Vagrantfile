@@ -1,0 +1,28 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+Vagrant.require_version ">= 1.8.1"
+
+Vagrant.configure(2) do |config|
+  $setup_scion = <<-SCRIPT
+    # install ntpd so we keep this box time-synchronized:
+    sudo apt-get update >/dev/null && sudo apt-get install -y --no-remove ntp
+
+    /vagrant/scion_install_script.sh -g /vagrant/gen/ -v /vagrant/client.conf -s /vagrant/scion.service \
+      -a ~/.bash_aliases -u /vagrant/scionupgrade.sh \
+      -t /vagrant/scionupgrade -c
+  SCRIPT
+  config.vm.box = "scion/ubuntu-16.04-64-scion"
+  # BR port forwarding not necessary for OpenVPN setup and depends on connection
+  
+  config.vm.network "forwarded_port", guest: 31042, host: 31042, protocol: "udp"
+  config.vm.network "forwarded_port", guest: 30041, host: 30041, protocol: "udp"
+  config.vm.network "forwarded_port", guest: 8000, host: 8000, protocol: "tcp"
+  config.vm.network "private_network", ip: "192.168.56.3", virtualbox__intnet: true
+  config.vm.provider "virtualbox" do |vb|
+    vb.customize [ "setextradata", :id, "VBoxInternal/Devices/VMMDev/0/Config/GetHostTimeDisabled", 1 ]
+    vb.memory = "2048"
+    vb.name = "SCIONLabVM-ffaa:1:c59"
+  end
+  config.vm.hostname = "scionlab-ffaa-1-c59"
+  config.vm.provision "shell", privileged: false, inline: $setup_scion
+end

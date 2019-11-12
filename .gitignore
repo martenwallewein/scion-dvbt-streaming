@@ -1,0 +1,6 @@
+sender
+receiver
+scionhttpproxy
+go-proxy
+.vagrant/
+gen/

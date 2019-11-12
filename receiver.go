@@ -15,6 +15,7 @@ import (
 func main() {
 
 	var local = flag.String("local", "", "The address on which the server will be listening")
+	var remote = flag.String("remote", "", "The address on which the server will be requested")
 	// var interactive = flag.Bool("i", false, "Wether to use interactive mode for path selection")
 
 	flag.Parse()
@@ -51,7 +52,8 @@ func main() {
 	}
 
 	// Make a get request
-	resp, err := c.Get("https://19-ffaa:1:c59,[127.0.0.1]:40002/image")
+	resp, err := c.Get(fmt.Sprintf("https://%s", *remote))
+	// resp, err := c.Get("https://19-ffaa:1:c59,[127.0.0.1]:40002/image")
 	if err != nil {
 		log.Fatal("GET request failed: ", err)
 	}
