@@ -31,6 +31,10 @@ func main() {
 		log.Fatal(err)
 	}
 
+	InitSCION(laddr)
+
+	raddr, _ := snet.AddrFromString(*remote)
+	ChoosePathByMetric(Shortest, laddr, raddr)
 	/*ia, l3, err := GetHostByName("image-server")
 	if err != nil {
 		log.Fatal(err)
@@ -52,7 +56,7 @@ func main() {
 	}
 
 	// Make a get request
-	resp, err := c.Get(fmt.Sprintf("https://%s", *remote))
+	resp, err := c.Get(fmt.Sprintf("https://%s:9001", *remote))
 	// resp, err := c.Get("https://19-ffaa:1:c59,[127.0.0.1]:40002/image")
 	if err != nil {
 		log.Fatal("GET request failed: ", err)

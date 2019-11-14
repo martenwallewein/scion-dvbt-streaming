@@ -97,9 +97,9 @@ func ProxyToScion(wr http.ResponseWriter, r *http.Request) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		log.Fatal("Received status ", resp.Status)
-	}
+	// if resp.StatusCode != http.StatusOK {
+	// 	log.Fatal("Received status ", resp.Status)
+	// }
 
 	fmt.Println("Content-Length: ", resp.ContentLength)
 	fmt.Println("Content-Type: ", resp.Header.Get("Content-Type"))
