@@ -101,9 +101,8 @@ func ProxyFromScion(wr http.ResponseWriter, r *http.Request) {
 	for name, value := range r.Header {
 		req.Header.Set(name, value[0])
 	}
-	// req.Close = true
+
 	resp, err = client.Do(req)
-	// r.Body.Close()
 
 	// combined for GET/POST
 	if err != nil {
@@ -111,22 +110,13 @@ func ProxyFromScion(wr http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// conn := &HttpConnection{r, resp}
-
 	for k, v := range resp.Header {
 		wr.Header().Set(k, v[0])
 	}
 
-	// PrintHTTP(conn)
-
 	wr.WriteHeader(resp.StatusCode)
 	io.Copy(wr, resp.Body)
 	defer resp.Body.Close()
-
-	//connChannel <- &HttpConnection{r,resp}
-
-	// log.Println("Serving sample.mp4")
-	// http.ServeFile(wr, r, "./sample.mp4")
 }
 
 func main() {

@@ -34,32 +34,20 @@ func ProxyFromScion(wr http.ResponseWriter, r *http.Request) {
 	for name, value := range r.Header {
 		req.Header.Set(name, value[0])
 	}
-	// req.Close = true
+
 	resp, err = client.Do(req)
-	// r.Body.Close()
 
 	// combined for GET/POST
 	if err != nil {
 		http.Error(wr, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
-	// conn := &HttpConnection{r, resp}
-
 	for k, v := range resp.Header {
 		wr.Header().Set(k, v[0])
 	}
-
-	// PrintHTTP(conn)
-
 	wr.WriteHeader(resp.StatusCode)
 	io.Copy(wr, resp.Body)
 	defer resp.Body.Close()
-
-	//connChannel <- &HttpConnection{r,resp}
-
-	// log.Println("Serving sample.mp4")
-	// http.ServeFile(wr, r, "./sample.mp4")
 }
 
 func ProxyToScion(wr http.ResponseWriter, r2 *http.Request) {
@@ -105,19 +93,6 @@ func ProxyToScion(wr http.ResponseWriter, r2 *http.Request) {
 	fmt.Println("Content-Length: ", resp.ContentLength)
 	fmt.Println("Content-Type: ", resp.Header.Get("Content-Type"))
 
-	// bytes := 1000000
-	// bytesRead := 0
-	// b := make([]byte, bytes)
-	/*for {
-		_, err := resp.Body.Read(b)
-		bytesRead += bytes
-		fmt.Printf("Read %d bytes\n", bytesRead)
-		if err == io.EOF {
-			break
-		}
-	}*/
-	// file, err := os.Create(strings.TrimSpace("./" + "test" + ".mp4"))
-	// defer file.Close()
 	_, err = io.Copy(wr, req)
 	log.Println(err)
 	fmt.Println("Successfully ")
