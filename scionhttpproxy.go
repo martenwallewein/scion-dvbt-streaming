@@ -17,131 +17,77 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
+	"github.com/machinebox/progress"
 	. "github.com/netsec-ethz/scion-apps/lib/scionutil"
 	"github.com/netsec-ethz/scion-apps/lib/shttp"
+	"github.com/pkg/errors"
 	"github.com/scionproto/scion/go/lib/snet"
 	"io"
 	"log"
 	"net/http"
-	"os"
-	"strings"
+	"strconv"
 	"time"
 )
 
-type HttpConnection struct {
-	Request  *http.Request
-	Response *http.Response
-}
-
-type HttpConnectionChannel chan *HttpConnection
-
-var connChannel = make(HttpConnectionChannel)
 var local *string
 var remote *string
 var remoteIp *string
 var direction *string
+var err error
+var laddr string
+var lsaddr *snet.Addr
 
-func PrintHTTP(conn *HttpConnection) {
-	log.Printf("%v %v\n", conn.Request.Method, conn.Request.RequestURI)
-	for k, v := range conn.Request.Header {
-		fmt.Println(k, ":", v)
-	}
-	log.Println("==============================")
-	log.Printf("HTTP/1.1 %v\n", conn.Response.Status)
-	for k, v := range conn.Response.Header {
-		fmt.Println(k, ":", v)
-	}
-	log.Println(conn.Response.Body)
-	log.Println("==============================")
-}
-
-func ProxyToScion(wr http.ResponseWriter, r *http.Request) {
-
-	var err error
-	// var req *http.Request
-
-	var laddr *snet.Addr
-
-	if *local == "" {
-		laddr, err = GetLocalhost()
-	} else {
-		laddr, err = snet.AddrFromString(*local)
-	}
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	raddr, err := snet.AddrFromString(*remoteIp)
-	if err != nil {
-		log.Fatal(err)
-	}
-	/*ia, l3, err := GetHostByName("image-server")
-	if err != nil {
-		log.Fatal(err)
-	}
-	l4 := addr.NewL4UDPInfo(40002)
-	raddr := &snet.Addr{IA: ia, Host: &addr.AppAddr{L3: l3, L4: l4}}
-
-	if *interactive {
-		ChoosePathInteractive(laddr, raddr)
-	} else {
-		ChoosePathByMetric(Shortest, laddr, raddr)
-	}*/
-
-	ChoosePathByMetric(Shortest, laddr, raddr)
-
-	// Create a standard server with our custom RoundTripper
+func ProxyToScion(wr http.ResponseWriter, r2 *http.Request) {
 	c := &http.Client{
 		Transport: &shttp.Transport{
-			LAddr: laddr,
+			LAddr: lsaddr,
 		},
-		Timeout: 5 * time.Second,
 	}
 
 	// Make a get request
-
-	req, err := http.NewRequest(r.Method, fmt.Sprintf("https://%s", *remote), nil)
-	resp, err := c.Do(req)
+	resp, err := c.Get(fmt.Sprintf("https://%s:9001", *remote))
 	// resp, err := c.Get("https://19-ffaa:1:c59,[127.0.0.1]:40002/image")
 	if err != nil {
 		log.Fatal("GET request failed: ", err)
 	}
-
-	// if resp.StatusCode != http.StatusOK {
-	// 	log.Fatal("Received status ", resp.Status)
-	// }
-
-	// fmt.Println("Content-Length: ", resp.ContentLength)
-	// fmt.Println("Content-Type: ", resp.Header.Get("Content-Type"))
-
-	// log.Printf("Request proxied, reading response...")
-
-	// conn := &HttpConnection{r, resp}
-	// PrintHTTP(conn)
-	for k, v := range resp.Header {
-		wr.Header().Set(k, v[0])
-	}
-	wr.WriteHeader(resp.StatusCode)
-
-	file, err := os.Create(strings.TrimSpace("./" + "test" + ".mp4"))
-	defer file.Close()
-	_, err = io.Copy(file, resp.Body)
-	log.Println(err)
-
-	// log.Println("Copied to local file")
-
-	//_, err = io.Copy(wr, resp.Body)
-	// log.Println(err)
-
-	log.Println("Copied to request")
-
 	defer resp.Body.Close()
 
-	// defer resp.Body.Close()
+	contentLengthHeader := resp.Header.Get("Content-Length")
+	if contentLengthHeader == "" {
+		errors.New("cannot determine progress without Content-Length")
+	}
+	size, err := strconv.ParseInt(contentLengthHeader, 10, 64)
+	if err != nil {
+		errors.Wrapf(err, "bad Content-Length %q", contentLengthHeader)
+	}
+	ctx := context.Background()
+	req := progress.NewReader(resp.Body)
 
-	//connChannel <- &HttpConnection{r,resp}
+	log.Println(size)
+
+	go func() {
+		progressChan := progress.NewTicker(ctx, req, size, 1*time.Second)
+		for p := range progressChan {
+			fmt.Printf("\r%v remaining...", p.Remaining().Round(time.Second))
+		}
+		fmt.Println("\rdownload is completed")
+	}()
+
+	if resp.StatusCode != http.StatusOK {
+		log.Fatal("Received status ", resp.Status)
+	}
+
+	fmt.Println("Content-Length: ", resp.ContentLength)
+	fmt.Println("Content-Type: ", resp.Header.Get("Content-Type"))
+
+	wr.WriteHeader(200)
+	_, err = io.Copy(wr, req)
+	log.Println(err)
+	fmt.Println("Successfully ")
+
 }
 
 func ProxyFromScion(wr http.ResponseWriter, r *http.Request) {
@@ -195,9 +141,18 @@ func main() {
 	var localUrl = flag.String("localurl", "localhost:8008", "Ip address of the current server")
 
 	flag.Parse()
-	var err error
 
 	if *direction == "toScion" {
+
+		if *local == "" {
+			lsaddr, err = GetLocalhost()
+		} else {
+			lsaddr, err = snet.AddrFromString(*local)
+		}
+		if err != nil {
+			log.Fatal(err)
+		}
+
 		http.HandleFunc("/", ProxyToScion)
 		log.Fatal(http.ListenAndServe(*localUrl, nil))
 	} else {
