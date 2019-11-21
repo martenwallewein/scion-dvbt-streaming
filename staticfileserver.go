@@ -5,10 +5,10 @@ import (
 )
 
 func fileh(w http.ResponseWriter, r *http.Request) {
-	http.ServeFile(w, r, "/sample.mp4")
+	http.ServeFile(w, r, "./sample.mp4")
 }
 
 func main() {
 	http.HandleFunc("/", fileh)
-	panic(http.ListenAndServe("78.47.172.41:8088", nil))
+	panic(http.ListenAndServe("141.44.25.148:8088", nil))
 }

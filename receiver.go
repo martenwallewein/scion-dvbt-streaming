@@ -1,15 +1,21 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
+	"github.com/machinebox/progress"
+	. "github.com/netsec-ethz/scion-apps/lib/scionutil"
+	"github.com/netsec-ethz/scion-apps/lib/shttp"
+	"github.com/pkg/errors"
+	"github.com/scionproto/scion/go/lib/snet"
 	"io"
 	"log"
 	"net/http"
-
-	. "github.com/netsec-ethz/scion-apps/lib/scionutil"
-	"github.com/netsec-ethz/scion-apps/lib/shttp"
-	"github.com/scionproto/scion/go/lib/snet"
+	"os"
+	"strconv"
+	"strings"
+	"time"
 )
 
 func main() {
@@ -31,10 +37,10 @@ func main() {
 		log.Fatal(err)
 	}
 
-	InitSCION(laddr)
+	// InitSCION(laddr)
 
-	raddr, _ := snet.AddrFromString(*remote)
-	ChoosePathByMetric(Shortest, laddr, raddr)
+	// raddr, _ := snet.AddrFromString(*remote)
+	// ChoosePathByMetric(MTU, laddr, raddr)
 	/*ia, l3, err := GetHostByName("image-server")
 	if err != nil {
 		log.Fatal(err)
@@ -63,6 +69,27 @@ func main() {
 	}
 	defer resp.Body.Close()
 
+	contentLengthHeader := resp.Header.Get("Content-Length")
+	if contentLengthHeader == "" {
+		errors.New("cannot determine progress without Content-Length")
+	}
+	size, err := strconv.ParseInt(contentLengthHeader, 10, 64)
+	if err != nil {
+		errors.Wrapf(err, "bad Content-Length %q", contentLengthHeader)
+	}
+	ctx := context.Background()
+	r := progress.NewReader(resp.Body)
+
+	log.Println(size)
+
+	go func() {
+		progressChan := progress.NewTicker(ctx, r, size, 1*time.Second)
+		for p := range progressChan {
+			fmt.Printf("\r%v remaining...", p.Remaining().Round(time.Second))
+		}
+		fmt.Println("\rdownload is completed")
+	}()
+
 	if resp.StatusCode != http.StatusOK {
 		log.Fatal("Received status ", resp.Status)
 	}
@@ -70,16 +97,20 @@ func main() {
 	fmt.Println("Content-Length: ", resp.ContentLength)
 	fmt.Println("Content-Type: ", resp.Header.Get("Content-Type"))
 
-	bytes := 1024 * 1024
-
-	b := make([]byte, bytes)
-	for {
+	// bytes := 1000000
+	// bytesRead := 0
+	// b := make([]byte, bytes)
+	/*for {
 		_, err := resp.Body.Read(b)
-		fmt.Printf("Read %d bytes", bytes)
+		bytesRead += bytes
+		fmt.Printf("Read %d bytes\n", bytesRead)
 		if err == io.EOF {
 			break
 		}
-	}
-
+	}*/
+	file, err := os.Create(strings.TrimSpace("./" + "test" + ".mp4"))
+	defer file.Close()
+	_, err = io.Copy(file, r)
+	log.Println(err)
 	fmt.Println("Successfully ")
 }

@@ -25,6 +25,9 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
+	"strings"
+	"time"
 )
 
 type HttpConnection struct {
@@ -37,6 +40,7 @@ type HttpConnectionChannel chan *HttpConnection
 var connChannel = make(HttpConnectionChannel)
 var local *string
 var remote *string
+var remoteIp *string
 var direction *string
 
 func PrintHTTP(conn *HttpConnection) {
@@ -69,6 +73,10 @@ func ProxyToScion(wr http.ResponseWriter, r *http.Request) {
 		log.Fatal(err)
 	}
 
+	raddr, err := snet.AddrFromString(*remoteIp)
+	if err != nil {
+		log.Fatal(err)
+	}
 	/*ia, l3, err := GetHostByName("image-server")
 	if err != nil {
 		log.Fatal(err)
@@ -82,37 +90,55 @@ func ProxyToScion(wr http.ResponseWriter, r *http.Request) {
 		ChoosePathByMetric(Shortest, laddr, raddr)
 	}*/
 
+	ChoosePathByMetric(Shortest, laddr, raddr)
+
 	// Create a standard server with our custom RoundTripper
 	c := &http.Client{
 		Transport: &shttp.Transport{
 			LAddr: laddr,
 		},
+		Timeout: 5 * time.Second,
 	}
 
 	// Make a get request
-	resp, err := c.Get(fmt.Sprintf("https://%s", *remote))
+
+	req, err := http.NewRequest(r.Method, fmt.Sprintf("https://%s", *remote), nil)
+	resp, err := c.Do(req)
 	// resp, err := c.Get("https://19-ffaa:1:c59,[127.0.0.1]:40002/image")
 	if err != nil {
 		log.Fatal("GET request failed: ", err)
 	}
-	defer resp.Body.Close()
 
 	// if resp.StatusCode != http.StatusOK {
 	// 	log.Fatal("Received status ", resp.Status)
 	// }
 
-	fmt.Println("Content-Length: ", resp.ContentLength)
-	fmt.Println("Content-Type: ", resp.Header.Get("Content-Type"))
+	// fmt.Println("Content-Length: ", resp.ContentLength)
+	// fmt.Println("Content-Type: ", resp.Header.Get("Content-Type"))
 
-	log.Printf("Request proxied, reading response...")
+	// log.Printf("Request proxied, reading response...")
 
-	conn := &HttpConnection{r, resp}
-	PrintHTTP(conn)
+	// conn := &HttpConnection{r, resp}
+	// PrintHTTP(conn)
 	for k, v := range resp.Header {
 		wr.Header().Set(k, v[0])
 	}
 	wr.WriteHeader(resp.StatusCode)
-	io.Copy(wr, resp.Body)
+
+	file, err := os.Create(strings.TrimSpace("./" + "test" + ".mp4"))
+	defer file.Close()
+	_, err = io.Copy(file, resp.Body)
+	log.Println(err)
+
+	// log.Println("Copied to local file")
+
+	//_, err = io.Copy(wr, resp.Body)
+	// log.Println(err)
+
+	log.Println("Copied to request")
+
+	defer resp.Body.Close()
+
 	// defer resp.Body.Close()
 
 	//connChannel <- &HttpConnection{r,resp}
@@ -125,7 +151,7 @@ func ProxyFromScion(wr http.ResponseWriter, r *http.Request) {
 	client := &http.Client{}
 
 	log.Printf("%v %v", r.Method, r.RequestURI)
-	req, err = http.NewRequest(r.Method, *remote, r.Body)
+	req, err = http.NewRequest(r.Method, *remote, nil)
 	for name, value := range r.Header {
 		req.Header.Set(name, value[0])
 	}
@@ -139,23 +165,29 @@ func ProxyFromScion(wr http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	conn := &HttpConnection{r, resp}
+	// conn := &HttpConnection{r, resp}
 
 	for k, v := range resp.Header {
 		wr.Header().Set(k, v[0])
 	}
+
+	// PrintHTTP(conn)
+
 	wr.WriteHeader(resp.StatusCode)
 	io.Copy(wr, resp.Body)
 	defer resp.Body.Close()
 
-	PrintHTTP(conn)
 	//connChannel <- &HttpConnection{r,resp}
+
+	// log.Println("Serving sample.mp4")
+	// http.ServeFile(wr, r, "./sample.mp4")
 }
 
 func main() {
 
 	local = flag.String("local", "", "The address on which the server will be listening")
 	remote = flag.String("remote", "", "The address on which the server will be sebd")
+	remoteIp = flag.String("remoteip", "", "The scion address on which the server will be sebd")
 	direction = flag.String("direction", "", "From ip to scion or from scion to ip")
 	var port = flag.Uint("p", 40002, "port the server listens on (only relevant if local address not specified)")
 	var tlsCert = flag.String("cert", "tls.pem", "Path to TLS pemfile")
@@ -190,3 +222,7 @@ func main() {
 
 // ./scionhttpproxy --local=17-ffaa:1:cf1,[78.46.129.90]:9001 --remote=http://78.46.129.90:8088 --direction=fromScion --cert tls.pem --key tls.key
 // ./scionhttpproxy --remote=17-ffaa:1:cf1,[78.46.129.90]:9001 --localurl=78.46.129.90:9002 --direction=toScion
+
+// ./scionhttpproxy --local="19-ffaa:1:c3f,[141.44.25.148]:9001" --remote="http://78.46.129.90:8088" --direction=fromScion --cert tls.cert --key tls.key
+
+// ./scionhttpproxy --remote="19-ffaa:1:c3f,[141.44.25.148]:9001" --localurl="141.44.25.151:9002" --direction=toScion
