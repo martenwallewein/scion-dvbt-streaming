@@ -1,0 +1,7 @@
+File        SCION   NORMAL
+1G file     52.0M   111M
+100M file   51.6M   109M
+10M file    38.6M   108M
+1M file     14.2M   100M
+
+Idea: Initial connection setup of quic con costly

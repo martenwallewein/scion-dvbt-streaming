@@ -1,7 +1,7 @@
 package main
 
 import (
-	"context"
+	// "context"
 	"flag"
 	"fmt"
 	"github.com/machinebox/progress"
@@ -22,6 +22,60 @@ var local *string
 var localurl *string
 var remote *string
 var direction *string
+
+func ProxyToScion(wr http.ResponseWriter, r2 *http.Request) {
+	c := &http.Client{
+		Transport: &shttp.Transport{
+			LAddr: laddr,
+		},
+	}
+	var start time.Time
+	start = time.Now()
+	// Make a get request
+	resp, err := c.Get(fmt.Sprintf("https://%s:9001", *remote))
+	// resp, err := c.Get("https://19-ffaa:1:c59,[127.0.0.1]:40002/image")
+	if err != nil {
+		log.Fatal("GET request failed: ", err)
+	}
+	defer resp.Body.Close()
+
+	contentLengthHeader := resp.Header.Get("Content-Length")
+	if contentLengthHeader == "" {
+		errors.New("cannot determine progress without Content-Length")
+	}
+	size, err := strconv.ParseInt(contentLengthHeader, 10, 64)
+	if err != nil {
+		errors.Wrapf(err, "bad Content-Length %q", contentLengthHeader)
+	}
+	// ctx := context.Background()
+	req := progress.NewReader(resp.Body)
+
+	log.Println(size)
+
+	/*go func() {
+		progressChan := progress.NewTicker(ctx, req, size, 1*time.Second)
+		for p := range progressChan {
+			fmt.Printf("\r%v remaining...", p.Remaining().Round(time.Second))
+		}
+		fmt.Println("\rdownload is completed")
+	}()*/
+
+	if resp.StatusCode != http.StatusOK {
+		log.Fatal("Received status ", resp.Status)
+	}
+
+	fmt.Println("Content-Length: ", size)
+	fmt.Println("Content-Type: ", resp.Header.Get("Content-Type"))
+
+	wr.WriteHeader(200)
+	_, err = io.Copy(wr, req)
+	// log.Println(err)
+	duration := time.Since(start)
+	fmt.Printf("Total time: %v\n", duration)
+	fmt.Printf("avg speed: %d bytes per ms\n", (size)/(duration.Milliseconds()))
+	fmt.Println("Successfully ")
+
+}
 
 func ProxyFromScion(wr http.ResponseWriter, r *http.Request) {
 	var resp *http.Response
@@ -48,55 +102,6 @@ func ProxyFromScion(wr http.ResponseWriter, r *http.Request) {
 	wr.WriteHeader(resp.StatusCode)
 	io.Copy(wr, resp.Body)
 	defer resp.Body.Close()
-}
-
-func ProxyToScion(wr http.ResponseWriter, r2 *http.Request) {
-	c := &http.Client{
-		Transport: &shttp.Transport{
-			LAddr: laddr,
-		},
-	}
-
-	// Make a get request
-	resp, err := c.Get(fmt.Sprintf("https://%s:9001", *remote))
-	// resp, err := c.Get("https://19-ffaa:1:c59,[127.0.0.1]:40002/image")
-	if err != nil {
-		log.Fatal("GET request failed: ", err)
-	}
-	defer resp.Body.Close()
-
-	contentLengthHeader := resp.Header.Get("Content-Length")
-	if contentLengthHeader == "" {
-		errors.New("cannot determine progress without Content-Length")
-	}
-	size, err := strconv.ParseInt(contentLengthHeader, 10, 64)
-	if err != nil {
-		errors.Wrapf(err, "bad Content-Length %q", contentLengthHeader)
-	}
-	ctx := context.Background()
-	req := progress.NewReader(resp.Body)
-
-	log.Println(size)
-
-	go func() {
-		progressChan := progress.NewTicker(ctx, req, size, 1*time.Second)
-		for p := range progressChan {
-			fmt.Printf("\r%v remaining...", p.Remaining().Round(time.Second))
-		}
-		fmt.Println("\rdownload is completed")
-	}()
-
-	if resp.StatusCode != http.StatusOK {
-		log.Fatal("Received status ", resp.Status)
-	}
-
-	fmt.Println("Content-Length: ", resp.ContentLength)
-	fmt.Println("Content-Type: ", resp.Header.Get("Content-Type"))
-
-	_, err = io.Copy(wr, req)
-	log.Println(err)
-	fmt.Println("Successfully ")
-	wr.WriteHeader(200)
 }
 
 func main() {
