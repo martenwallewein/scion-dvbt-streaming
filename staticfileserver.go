@@ -5,7 +5,7 @@ import (
 )
 
 func fileh(w http.ResponseWriter, r *http.Request) {
-	http.ServeFile(w, r, "./sample.mp4")
+	http.ServeFile(w, r, "./1G.file")
 }
 
 func main() {
